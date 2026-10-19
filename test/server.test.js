@@ -172,6 +172,73 @@ describe('Server', () => {
     });
   });
 
+  // @see https://github.com/webpack/webpack-dev-middleware/security/advisories/GHSA-g84c-rxfj-3j2c
+  describe('should not allow path traversal when publicPath has no trailing slash', () => {
+    beforeAll((done) => {
+      app = express();
+      const compiler = webpack({
+        ...webpackConfig,
+        output: {
+          filename: 'bundle.js',
+          path: '/dist',
+        },
+      });
+      instance = middleware(compiler, {
+        stats: 'errors-only',
+        logLevel,
+        publicPath: '/static',
+      });
+      app.use(instance);
+      listen = listenShorthand(done);
+
+      // A sensitive file placed one level above the served output root.
+      instance.fileSystem.writeFileSync('/secret.txt', 'TOP SECRET');
+    });
+
+    afterAll(close);
+
+    it('should serve a legitimate file under the "/static" prefix', (done) => {
+      request(app)
+        .get('/static/bundle.js')
+        .expect(200, /console\.log\('Hey\.'\)/, done);
+    });
+
+    it('should not allow to get files above root', (done) => {
+      request(app)
+        .get('/static../secret.txt')
+        .expect('Content-Type', 'text/html; charset=utf-8')
+        .expect(404, done);
+    });
+
+    it('should not allow to get files above root using encoded dots', (done) => {
+      request(app)
+        .get('/static%2e%2e/secret.txt')
+        .expect('Content-Type', 'text/html; charset=utf-8')
+        .expect(404, done);
+    });
+
+    it('should not allow to get files above root using encoded slash', (done) => {
+      request(app)
+        .get('/static..%2fsecret.txt')
+        .expect('Content-Type', 'text/html; charset=utf-8')
+        .expect(404, done);
+    });
+
+    it('should not allow to get files above root using encoded backslash', (done) => {
+      request(app)
+        .get('/static..%5csecret.txt')
+        .expect('Content-Type', 'text/html; charset=utf-8')
+        .expect(404, done);
+    });
+
+    it('should not allow to get files above root using mixed separators', (done) => {
+      request(app)
+        .get('/static..%5cdir%5c..%2f%2e%2e/secret.txt')
+        .expect('Content-Type', 'text/html; charset=utf-8')
+        .expect(404, done);
+    });
+  });
+
   describe('accepted methods', () => {
     beforeAll((done) => {
       app = express();

@@ -28,6 +28,79 @@ describe('GetFilenameFromUrl', () => {
       publicPath: '/',
       expected: "/file.js",
     },
+    // publicPath without a trailing slash must not allow escaping outputPath
+    // @see https://github.com/webpack/webpack-dev-middleware/security/advisories/GHSA-g84c-rxfj-3j2c
+    {
+      url: '/static/index.html',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: '/dist/index.html',
+    },
+    {
+      // a filename that only starts with ".." stays within outputPath
+      url: '/static..foo.js',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: '/dist/..foo.js',
+    },
+    {
+      url: '/static../secret.txt',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: '/static..',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: '/static../../etc/passwd',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: '/static%2e%2e/secret.txt',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: '/static..%2fsecret.txt',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: '/static..%5csecret.txt',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: '/static..%5cdir%5c..%2f%2e%2e/secret.txt',
+      outputPath: '/dist',
+      publicPath: '/static',
+      expected: false,
+    },
+    {
+      url: 'http://localhost/static../secret.txt',
+      outputPath: '/dist',
+      publicPath: 'http://localhost/static',
+      expected: false,
+    },
+    {
+      url: '/js../secret.txt',
+      compilers: [
+        { outputPath: '/foo', options: { output: { publicPath: '/js' } } },
+        { outputPath: '/bar', options: { output: { publicPath: '/css' } } },
+      ],
+      outputPath: '/root',
+      publicPath: '/',
+      expected: false,
+    },
     {
       url: '/foo.js',
       outputPath: '/',
@@ -386,6 +459,19 @@ describe('GetFilenameFromUrl', () => {
         outputPath: 'C:\\My %20 Path\\wwwroot',
         publicPath: '/windows%20test',
         expected: 'C:\\My %20 Path\\wwwroot/test & test & %20.txt',
+      },
+      // publicPath without a trailing slash must not allow escaping outputPath
+      {
+        url: '/test../windows.txt',
+        outputPath: 'c:\\foo',
+        publicPath: '/test',
+        expected: false,
+      },
+      {
+        url: '/test..%5cwindows.txt',
+        outputPath: 'c:\\foo',
+        publicPath: '/test',
+        expected: false,
       },
     ];
 
