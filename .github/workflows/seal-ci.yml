@@ -1,0 +1,80 @@
+# Authored by the sealer: upstream has no GitHub Actions CI.
+# Mirrors azure-pipelines.yml (npm ci + jest on the Node test matrix).
+name: seal-ci
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-filter:
+        description: "Optional jest test path pattern / extra jest args"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["12", "6"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 12.20.0
+
+      - name: Install npm 6.14.9
+        run: |
+          npm i -g npm@6.14.9
+          node -v; npm -v
+
+      # Lockfile v1; npm 3 on Node 6 can't run `npm ci`, so install with Node 12 first.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Switch to Node 6
+        if: matrix.node == '6'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 6
+
+      - name: Print Node version
+        if: matrix.node == '6'
+        run: node -v
+
+      # test:only = jest. Skips the `pretest` eslint gate and coverage
+      # instrumentation: jest.config's coveragePathIgnorePatterns ['test']
+      # makes istanbul instrument node_modules.
+      - name: Run tests
+        run: npm run test:only -- --ci --verbose ${{ inputs.test-filter }}
+
+  pack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 12.20.0
+
+      # Publisher used Node 12.20.0 / npm 6.14.9.
+      - name: Install npm 6.14.9
+        run: |
+          npm i -g npm@6.14.9
+          node -v; npm -v
+
+      # No prepack/prepare scripts; files whitelist = lib, index.js.
+      - name: Pack
+        run: |
+          npm pack
+          ls -l webpack-dev-middleware-3.7.3.tgz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webpack-dev-middleware-3.7.3.tgz
+          path: webpack-dev-middleware-3.7.3.tgz
+          if-no-files-found: error
